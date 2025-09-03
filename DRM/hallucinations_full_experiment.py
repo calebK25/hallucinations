@@ -1,8 +1,4 @@
-# =============================================================================
-# Multi-Model Hallucination Testing Setup - Ultra-Optimized 2x2 Experimental Design
-# =============================================================================
-
-from transformers import AutoTokenizer, AutoModelForCausalLM
+e-exfrom transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 import time
 import random
@@ -10,46 +6,9 @@ import pandas as pd
 import os
 import gc
 
-"""hallucination_test_models_full_experiment
-================================================
-Ultra-optimised implementation of the Deese–Roediger–McDermott (DRM)
-false-memory paradigm for large language models.
-
-Key public entry point
-----------------------
-run_full_2x2_drm_study_ultra_optimized(models_to_test: list[str], ...)
-    Executes a 2 × 2 factorial experiment (list-length × context-timing)
-    for each model key provided and writes compact CSV results.
-
-How to customise the model roster
----------------------------------
-The single source of truth is the global ``MODELS`` dictionary below.
-Each key (e.g. ``"mistral-7b-v1"``) maps to a dict containing:
-    name                Full Hub repo ID
-    context_window      Maximum tokens usable for the prompt
-    requires_auth       Whether a Hugging Face token is needed
-    performance_tier    Informal grouping (gpt3.5, gpt4.0, reasoning)
-    trust_remote_code   Pass-through to *transformers* ``from_pretrained``
-Add, remove or edit entries and the rest of the module automatically
-picks up the change—no further edits required.
-
-Cluster/offline execution
--------------------------
-Set the following environment variables in your SLURM script:
-    HF_HOME                Cache root on shared storage (e.g. /scratch/gpfs/$USER/models2/hub)
-    HF_TOKEN               Personal access token for gated models (if needed)
-    TRANSFORMERS_OFFLINE   1 (prevents network access on compute nodes)
-    HF_DATASETS_OFFLINE    1 (ditto for *datasets*)
-
-Running outside SLURM is also possible; simply ensure the models are
-pre-downloaded and HF_HOME is set so ``local_files_only=True`` succeeds.
-"""
-
-# =============================================================================
-# Model Configurations
-# =============================================================================
+# Model configurations
 MODELS = {
-    # === GPT-3.5 LEVEL MODELS (7B parameters, 4096 tokens) ===
+    # GPT-3.5 level models
     "llama2-7b": {
         "name": "meta-llama/Llama-2-7b-chat-hf",
         "context_window": 4096,
@@ -71,7 +30,7 @@ MODELS = {
         "trust_remote_code": False
     },
     
-    # === GPT-4.0 LEVEL MODELS (7B parameters) ===
+    # GPT-4.0 level models
     "qwen-7b": {
         "name": "Qwen/Qwen1.5-7B-Chat",
         "context_window": 4096,
@@ -94,7 +53,7 @@ MODELS = {
         "trust_remote_code": True
     },
     
-    # === REASONING MODELS (7B parameters) ===
+    # Reasoning models
     "deepseek-coder-7b": {
         "name": "deepseek-ai/deepseek-coder-7b-instruct-v1.5",
         "context_window": 4096,
@@ -129,15 +88,10 @@ def load_model(model_key):
     model_config = MODELS[model_key]
     model_name = model_config["name"]
     
-    print(f"🔄 Loading {model_key} ({model_name})...")
-    print(f"Context window: {model_config['context_window']} tokens")
-    print(f"Performance tier: {model_config['performance_tier']}")
-    
-    # Set up cache directory for offline mode, prioritizing HF_HOME
+    print(f"Loading {model_key} ({model_name})...")
     cache_dir = os.environ.get('HF_HOME', os.environ.get('TRANSFORMERS_CACHE', os.path.expanduser("~/model_cache")))
-    
+
     try:
-        # Get token from environment for authenticated models
         token = os.environ.get('HF_TOKEN') if model_config["requires_auth"] else None
 
         tokenizer = AutoTokenizer.from_pretrained(
@@ -164,16 +118,16 @@ def load_model(model_key):
         )
         model.eval()
         
-        print(f"✅ {model_key} loaded successfully!")
+        print(f"Loaded {model_key}")
         return tokenizer, model, model_config
-        
+
     except Exception as e:
-        print(f"❌ Error loading {model_key}: {e}")
+        print(f"Error loading {model_key}: {e}")
         if "local_files_only" in str(e) or "couldn't find" in str(e):
-            print("💡 Model not found in cache. Please run download_models.py on login node first.")
-            print(f"💡 Cache directory: {cache_dir}")
+            print("Model not found in cache. Please run download_models.py on login node first.")
+            print(f"Cache directory: {cache_dir}")
         elif model_config["requires_auth"]:
-            print("💡 This model requires authentication. Make sure you have access and are logged in.")
+            print("This model requires authentication. Make sure you have access and are logged in.")
         return None, None, None
 
 def generate_response_fast(tokenizer, model, model_config, messages, max_new_tokens=512):
@@ -217,13 +171,8 @@ def generate_response_fast(tokenizer, model, model_config, messages, max_new_tok
             num_beams=1      # Greedy decoding for speed
         )
     
-    # Fast decoding
-    response = tokenizer.decode(outputs[0][inputs["input_ids"].shape[-1]:], skip_special_tokens=True).strip()
-    
-    # Simple truncation check
-    if len(response.split()) > 50 and response.count(response.split()[-1]) > 3:
-        response = ' '.join(response.split()[:40])
-    
+    # Decode response exactly as model produces it
+    response = tokenizer.decode(outputs[0][inputs["input_ids"].shape[-1]:], skip_special_tokens=True)
     return response
 
 def read_word_list(file_path, lure_word, list_length="short"):
@@ -241,7 +190,7 @@ def read_word_list(file_path, lure_word, list_length="short"):
         words = df[df['Lure Word'] == lure_word]['Related Word'].dropna().tolist()
         
         if not words:
-            print(f"⚠️  WARNING: No words found for lure word '{lure_word}' in {file_path}")
+            print(f"No words found for lure word '{lure_word}' in {file_path}")
             return []
 
         # Determine the number of words to select
@@ -299,22 +248,20 @@ def run_drm_experiment_2x2_ultra_optimized(model_key, num_sessions=10, word_list
                                           lure_word="sleep", list_length="short", context_window_condition="early"):
     """Ultra-optimized DRM experiment with minimal overhead"""
     
-    # Load model once
-    print(f"\n⚡ ULTRA-OPTIMIZED: Loading {model_key} for {list_length}-{context_window_condition} condition...")
+    print(f"Loading {model_key} for {list_length}-{context_window_condition} condition...")
     tokenizer, model, model_config = load_model(model_key)
     if model is None:
-        print(f"❌ Failed to load model {model_key}")
+        print(f"Failed to load model {model_key}")
         return []
     
     logs = []
     
-    # Pre-calculate math problem counts (reduced for speed)
     if context_window_condition == "early":
-        num_math_problems = 5  # Reduced from 10-12
-        print(f"🔸 EARLY: {num_math_problems} math problems")
+        num_math_problems = 5
+        print(f"Early condition: {num_math_problems} math problems")
     else:
-        num_math_problems = 50  # Reduced from ~150-200
-        print(f"🔸 LATE: {num_math_problems} math problems (optimized)")
+        num_math_problems = 50
+        print(f"Late condition: {num_math_problems} math problems")
     
     # Pre-generate all components
     word_list = read_word_list(word_list_file, lure_word, list_length)
@@ -338,7 +285,7 @@ def run_drm_experiment_2x2_ultra_optimized(model_key, num_sessions=10, word_list
     
     for batch_start in range(0, num_sessions, batch_size):
         batch_end = min(batch_start + batch_size, num_sessions)
-        print(f"⚡ Processing sessions {batch_start+1}-{batch_end} ({((batch_end/num_sessions)*100):.0f}% complete)")
+        print(f"Processing sessions {batch_start+1}-{batch_end} ({((batch_end/num_sessions)*100):.0f}% complete)")
         
         for session in range(batch_start + 1, batch_end + 1):
             messages = [{"role": "system", "content": system_prompt}]
@@ -365,10 +312,7 @@ def run_drm_experiment_2x2_ultra_optimized(model_key, num_sessions=10, word_list
                 "total_tokens": count_tokens_fast(tokenizer, present_prompt) + count_tokens_fast(tokenizer, present_response)
             })
             
-            # Step 2: Math problems (ultra-optimized batching)
-            # Process ALL math problems in just 2-3 batches instead of individually
             if context_window_condition == "early":
-                # For early condition, do all 5 problems at once
                 math_prompt = "Please solve these addition problems and respond with only the numerical answers (one per line):\n" + "\n".join(all_math_problems)
                 messages.append({"role": "user", "content": math_prompt})
                 math_response = generate_response_fast(tokenizer, model, model_config, messages, max_new_tokens=30)
@@ -390,16 +334,14 @@ def run_drm_experiment_2x2_ultra_optimized(model_key, num_sessions=10, word_list
                     "total_tokens": count_tokens_fast(tokenizer, math_prompt) + count_tokens_fast(tokenizer, math_response)
                 })
             else:
-                # For late condition, process in larger batches of 10
                 for i in range(0, len(all_math_problems), 10):
                     batch_problems = all_math_problems[i:i+10]
                     if batch_problems:
                         math_prompt = "Please solve these addition problems and respond with only the numerical answers (one per line):\n" + "\n".join(batch_problems)
                         messages.append({"role": "user", "content": math_prompt})
                         math_response = generate_response_fast(tokenizer, model, model_config, messages, max_new_tokens=50)
-                        messages.append({"role": "assistant", "content": math_response})
-                        
-                        # Only log first and last batch to reduce overhead
+                        messages.append({"role": "assistant", "content": math_response)
+
                         if i == 0 or i >= len(all_math_problems) - 10:
                             logs.append({
                                 "session": session,
@@ -451,67 +393,39 @@ def run_drm_experiment_2x2_ultra_optimized(model_key, num_sessions=10, word_list
             })
     
     # Cleanup
-    print(f"🧹 Cleaning up memory...")
+    print(f"Cleaning up memory...")
     del tokenizer, model
     gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
-    print(f"✅ Completed {num_sessions} sessions for {model_key}-{list_length}-{context_window_condition}\n")
+    print(f"Completed {num_sessions} sessions for {model_key}-{list_length}-{context_window_condition}\n")
     
     return logs
 
-def clean_word(word):
-    """Clean a word for comparison - remove punctuation, whitespace, convert to lowercase"""
-    import re
-    if pd.isna(word) or word is None:
-        return ""
-    
-    # Convert to lowercase and remove punctuation/whitespace
-    cleaned = re.sub(r'[^\w]', '', str(word).lower().strip())
-    
-    # Handle common word variations to improve matching
-    word_variations = {
-        'irritation': 'irritated',
-        'frustration': 'frustrated',
-        'madness': 'mad',
-        'anger': 'angry',  # Note: 'anger' is typically the lure word
-        'furious': 'fury',
-        'enraged': 'rage',
-        'hatred': 'hate',
-        'lividity': 'livid'
-    }
-    
-    # Convert variations to base form
-    if cleaned in word_variations:
-        cleaned = word_variations[cleaned]
-    
-    return cleaned
+
 
 def extract_original_words(df_all):
     """Extract the original word list from the word_list prompts"""
     word_list_entries = df_all[df_all['section'] == 'word_list']
     all_original_words = set()
-    
+
     for _, entry in word_list_entries.iterrows():
         prompt = entry['prompt']
-        # Extract words from "Please remember the following words: word1, word2, ..."
         if 'Please remember the following words:' in prompt:
-            words_part = prompt.split('Please remember the following words:')[1].strip(' .')
-            words = [clean_word(w) for w in words_part.split(', ')]
-            all_original_words.update([w for w in words if w])  # Remove empty strings
-    
+            words_part = prompt.split('Please remember the following words:')[1]
+            words = words_part.split(', ')
+            all_original_words.update([w.strip() for w in words if w.strip()])
+
     return all_original_words
 
 def extract_recalled_words(recall_response):
     """Extract words from a recall response"""
     if pd.isna(recall_response) or not recall_response:
         return set()
-    
-    # Split by common delimiters and clean
+
     import re
     words = re.split(r'[,\n\s]+', str(recall_response))
-    cleaned_words = {clean_word(w) for w in words if clean_word(w)}
-    return cleaned_words
+    return {w.strip() for w in words if w.strip()}
 
 def analyze_recall_performance(df_all, base_filename):
     """Analyze recall performance and create detailed performance metrics"""
@@ -537,8 +451,7 @@ def analyze_recall_performance(df_all, base_filename):
         false_memories = recalled_words - original_words
         
         # Check for lure word hallucination
-        lure_word_clean = clean_word(lure_word)
-        lure_word_hallucinated = lure_word_clean in recalled_words
+        lure_word_hallucinated = lure_word in recalled_words
         
         # Calculate accuracy metrics
         total_original = len(original_words)
@@ -604,18 +517,18 @@ def run_full_2x2_drm_study_ultra_optimized(models_to_test, num_sessions=10, word
                 context_condition = condition["context_window_condition"]
                 
                 print(f"\n{'='*80}")
-                print(f"⚡ ULTRA-OPTIMIZED EXPERIMENT {experiment_count}/{total_experiments}")
-                print(f"Model: {model_key.upper()}")
+                print(f"Experiment {experiment_count}/{total_experiments}")
+                print(f"Model: {model_key}")
                 print(f"Lure word: '{lure_word}'")
-                print(f"List length: {list_length.upper()} ({'10 words' if list_length == 'short' else '50 words'})")
-                print(f"Context window: {context_condition.upper()}")
+                print(f"List length: {list_length} ({'10 words' if list_length == 'short' else '50 words'})")
+                print(f"Context window: {context_condition}")
                 print(f"Sessions: {num_sessions}")
-                
+
                 elapsed = time.time() - start_time
                 if experiment_count > 1:
                     avg_time_per_exp = elapsed / (experiment_count - 1)
                     remaining_time = avg_time_per_exp * (total_experiments - experiment_count)
-                    print(f"⏱️  Estimated time remaining: {remaining_time/60:.1f} minutes")
+                    print(f"Estimated time remaining: {remaining_time/60:.1f} minutes")
                 print(f"{'='*80}")
                 
                 condition_start = time.time()
@@ -629,7 +542,7 @@ def run_full_2x2_drm_study_ultra_optimized(models_to_test, num_sessions=10, word
                     context_window_condition=context_condition
                 )
                 
-                print(f"⏱️  Condition completed in {(time.time() - condition_start)/60:.1f} minutes")
+                print(f"Condition completed in {(time.time() - condition_start)/60:.1f} minutes")
                 
                 if results:
                     # Process results efficiently
@@ -703,36 +616,32 @@ def run_full_2x2_drm_study_ultra_optimized(models_to_test, num_sessions=10, word
                         }
                         all_trial_results.append(summary_result)
                         
-                    print(f"✅ Processed {len(performance_data)} sessions")
-        
+                    print(f"Processed {len(performance_data)} sessions")
+
         model_elapsed = time.time() - model_start_time
-        print(f"\n⏱️  Model {model_key} completed in {model_elapsed/60:.1f} minutes")
+        print(f"\nModel {model_key} completed in {model_elapsed/60:.1f} minutes")
     
     total_elapsed = time.time() - start_time
-    print(f"\n⏱️  TOTAL EXPERIMENT TIME: {total_elapsed/60:.1f} minutes ({total_elapsed/3600:.2f} hours)")
-    
-    # Save results
+    print(f"\nTotal experiment time: {total_elapsed/60:.1f} minutes ({total_elapsed/3600:.2f} hours)")
+
     if all_trial_results:
         timestamp = time.strftime("%Y%m%d_%H%M%S")
-        
-        # Save only essential results
+
         results_file = f"drm_2x2_ultra_results_{timestamp}.csv"
         results_df = pd.DataFrame(all_trial_results)
         results_df = results_df.sort_values(['model', 'lure_word', 'list_length', 'context_window_condition', 'result_type', 'session_number'])
         results_df.to_csv(results_file, index=False)
-        
-        # Save minimal logs
+
         logs_file = f"drm_2x2_ultra_logs_{timestamp}.csv"
         logs_df = pd.DataFrame(all_interaction_logs)
         logs_df.to_csv(logs_file, index=False)
-        
-        print(f"\n⚡ ULTRA-OPTIMIZED RESULTS SAVED:")
-        print(f"📊 {results_file} - Results")
-        print(f"💬 {logs_file} - Recall logs only")
-        
-        # Print summary
+
+        print(f"\nResults saved:")
+        print(f"{results_file} - Results")
+        print(f"{logs_file} - Recall logs only")
+
         print(f"\n{'='*100}")
-        print("📈 ULTRA-OPTIMIZED 2x2 EXPERIMENTAL SUMMARY")
+        print("2x2 Experimental Summary")
         print(f"{'='*100}")
         print(f"{'Model':<15} {'Lure':<8} {'List':<6} {'Context':<8} {'Accuracy':<9} {'False Mem':<10} {'Lure Rate':<10}")
         print("-" * 100)
@@ -745,44 +654,37 @@ def run_full_2x2_drm_study_ultra_optimized(models_to_test, num_sessions=10, word
                   f"{entry['false_memory_rate_percent']:>8.1f}% "
                   f"{entry['lure_word_hallucination_rate_percent']:>8.1f}%")
         
-        print(f"\n⚡ OPTIMIZATIONS APPLIED:")
-        print("   ✓ Single model load per condition")
-        print("   ✓ Batch math problem processing (5-10 at once)")
-        print("   ✓ Reduced math problems (5 early, 50 late)")
-        print("   ✓ Global token caching with hash lookup")
-        print("   ✓ Minimal logging (recall only)")
-        print("   ✓ Pre-generated word lists")
-        print("   ✓ Optimized generation parameters")
-        print("   ✓ Batch session processing")
-        
+        print("Optimizations applied:")
+        print("   - Single model load per condition")
+        print("   - Batch math problem processing (5-10 at once)")
+        print("   - Reduced math problems (5 early, 50 late)")
+        print("   - Global token caching with hash lookup")
+        print("   - Minimal logging (recall only)")
+        print("   - Pre-generated word lists")
+        print("   - Optimized generation parameters")
+        print("   - Batch session processing")
+
         return results_file, logs_file
     else:
-        print("❌ No results to save")
+        print("No results to save")
         return None
 
-# =============================================================================
-# Example Usage
-# =============================================================================
 if __name__ == "__main__":
-    print("⚡ Multi-Model DRM Memory Experiment - ULTRA-OPTIMIZED 2x2 Design")
-    print("==================================================================")
-    
-    # All models available in the main dictionary will be tested.
-    # The `MODELS` dictionary at the top of the file is the single source of truth.
+    print("DRM Memory Experiment")
+
     test_models = list(MODELS.keys())
-    
-    # Run ultra-optimized study
+
     result_files = run_full_2x2_drm_study_ultra_optimized(
         models_to_test=test_models,
         num_sessions=10,
         lure_words=["anger", "sleep", "doctor"]
     )
-    
+
     if result_files:
         results_file, logs_file = result_files
-        print(f"\n✅ ULTRA-OPTIMIZED experiment completed!")
-        print(f"\n📊 Results saved to:")
+        print(f"\nExperiment completed!")
+        print(f"\nResults saved to:")
         print(f"   - {results_file}")
         print(f"   - {logs_file}")
     else:
-        print("\n❌ Experiment failed - no results generated") 
+        print("\nExperiment failed - no results generated") 
