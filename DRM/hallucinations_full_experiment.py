@@ -1,4 +1,4 @@
-e-exfrom transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 import time
 import random
@@ -130,19 +130,15 @@ def load_model(model_key):
             print("This model requires authentication. Make sure you have access and are logged in.")
         return None, None, None
 
-def generate_response_fast(tokenizer, model, model_config, messages, max_new_tokens=512):
-    """Optimized response generation with minimal overhead"""
+def generate_response(tokenizer, model, model_config, messages, max_new_tokens=512):
+    """Generate response using the model"""
     
-    # Fast chat template application
     if hasattr(tokenizer, 'apply_chat_template'):
         formatted_prompt = tokenizer.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True
         )
     else:
-        # Ultra-fast fallback
         formatted_prompt = "\n".join([f"{msg['role']}: {msg['content']}" for msg in messages]) + "\nAssistant:"
-    
-    # Fast tokenization with minimal processing
     inputs = tokenizer(
         formatted_prompt, 
         return_tensors="pt", 
@@ -216,8 +212,8 @@ def read_word_list(file_path, lure_word, list_length="short"):
         list_size = 10 if list_length == "short" else 50
         return [f"fallback_word_{i}" for i in range(1, list_size + 1)]
 
-def count_tokens_fast(tokenizer, text):
-    """Ultra-fast token counting with global cache"""
+def count_tokens(tokenizer, text):
+    """Count tokens in text using the tokenizer"""
     global TOKEN_CACHE
     
     # Use hash for faster lookup
@@ -244,9 +240,9 @@ def generate_math_problems_batch(num_problems):
         problems.append(f"{a} + {b} = ?")
     return problems
 
-def run_drm_experiment_2x2_ultra_optimized(model_key, num_sessions=10, word_list_file="related_words.csv", 
-                                          lure_word="sleep", list_length="short", context_window_condition="early"):
-    """Ultra-optimized DRM experiment with minimal overhead"""
+def run_drm_experiment(model_key, num_sessions=10, word_list_file="related_words.csv",
+                        lure_word="sleep", list_length="short", context_window_condition="early"):
+    """Run DRM experiment for a single model and condition"""
     
     print(f"Loading {model_key} for {list_length}-{context_window_condition} condition...")
     tokenizer, model, model_config = load_model(model_key)
@@ -263,11 +259,8 @@ def run_drm_experiment_2x2_ultra_optimized(model_key, num_sessions=10, word_list
         num_math_problems = 50
         print(f"Late condition: {num_math_problems} math problems")
     
-    # Pre-generate all components
     word_list = read_word_list(word_list_file, lure_word, list_length)
     word_list_str = ', '.join(word_list)
-    
-    # Pre-calculate token counts for fixed prompts
     system_prompt = ("You are a student doing a memory test which has 3 parts: "
                     "1) First, you will be asked to remember a list of words "
                     "2) Then, you will solve some math problems "
@@ -277,11 +270,9 @@ def run_drm_experiment_2x2_ultra_optimized(model_key, num_sessions=10, word_list
     present_prompt = f"Please remember the following words: {word_list_str}."
     recall_prompt = "Please recall the list of words I asked you to remember earlier. List only the words you remember, separated by commas, with no additional text or explanation."
     
-    # Pre-generate math problems
     all_math_problems = generate_math_problems_batch(num_math_problems)
     
-    # Batch process sessions
-    batch_size = 5  # Process 5 sessions at a time for progress updates
+    batch_size = 5
     
     for batch_start in range(0, num_sessions, batch_size):
         batch_end = min(batch_start + batch_size, num_sessions)
@@ -290,9 +281,9 @@ def run_drm_experiment_2x2_ultra_optimized(model_key, num_sessions=10, word_list
         for session in range(batch_start + 1, batch_end + 1):
             messages = [{"role": "system", "content": system_prompt}]
             
-            # Step 1: Present words (minimal processing)
+            # Step 1: Present words
             messages.append({"role": "user", "content": present_prompt})
-            present_response = generate_response_fast(tokenizer, model, model_config, messages, max_new_tokens=50)
+            present_response = generate_response(tokenizer, model, model_config, messages, max_new_tokens=50)
             messages.append({"role": "assistant", "content": present_response})
             
             # Log word presentation
@@ -307,15 +298,15 @@ def run_drm_experiment_2x2_ultra_optimized(model_key, num_sessions=10, word_list
                 "context_window_condition": context_window_condition,
                 "prompt": present_prompt,
                 "response": present_response,
-                "prompt_tokens": count_tokens_fast(tokenizer, present_prompt),
-                "response_tokens": count_tokens_fast(tokenizer, present_response),
-                "total_tokens": count_tokens_fast(tokenizer, present_prompt) + count_tokens_fast(tokenizer, present_response)
+                "prompt_tokens": count_tokens(tokenizer, present_prompt),
+                "response_tokens": count_tokens(tokenizer, present_response),
+                "total_tokens": count_tokens(tokenizer, present_prompt) + count_tokens(tokenizer, present_response)
             })
             
             if context_window_condition == "early":
                 math_prompt = "Please solve these addition problems and respond with only the numerical answers (one per line):\n" + "\n".join(all_math_problems)
                 messages.append({"role": "user", "content": math_prompt})
-                math_response = generate_response_fast(tokenizer, model, model_config, messages, max_new_tokens=30)
+                math_response = generate_response(tokenizer, model, model_config, messages, max_new_tokens=30)
                 messages.append({"role": "assistant", "content": math_response})
                 
                 logs.append({
@@ -329,9 +320,9 @@ def run_drm_experiment_2x2_ultra_optimized(model_key, num_sessions=10, word_list
                     "context_window_condition": context_window_condition,
                     "prompt": math_prompt,
                     "response": math_response,
-                    "prompt_tokens": count_tokens_fast(tokenizer, math_prompt),
-                    "response_tokens": count_tokens_fast(tokenizer, math_response),
-                    "total_tokens": count_tokens_fast(tokenizer, math_prompt) + count_tokens_fast(tokenizer, math_response)
+                    "prompt_tokens": count_tokens(tokenizer, math_prompt),
+                    "response_tokens": count_tokens(tokenizer, math_response),
+                    "total_tokens": count_tokens(tokenizer, math_prompt) + count_tokens(tokenizer, math_response)
                 })
             else:
                 for i in range(0, len(all_math_problems), 10):
@@ -339,8 +330,8 @@ def run_drm_experiment_2x2_ultra_optimized(model_key, num_sessions=10, word_list
                     if batch_problems:
                         math_prompt = "Please solve these addition problems and respond with only the numerical answers (one per line):\n" + "\n".join(batch_problems)
                         messages.append({"role": "user", "content": math_prompt})
-                        math_response = generate_response_fast(tokenizer, model, model_config, messages, max_new_tokens=50)
-                        messages.append({"role": "assistant", "content": math_response)
+                        math_response = generate_response(tokenizer, model, model_config, messages, max_new_tokens=50)
+                        messages.append({"role": "assistant", "content": math_response})
 
                         if i == 0 or i >= len(all_math_problems) - 10:
                             logs.append({
@@ -354,14 +345,14 @@ def run_drm_experiment_2x2_ultra_optimized(model_key, num_sessions=10, word_list
                                 "context_window_condition": context_window_condition,
                                 "prompt": math_prompt,
                                 "response": math_response,
-                                "prompt_tokens": count_tokens_fast(tokenizer, math_prompt),
-                                "response_tokens": count_tokens_fast(tokenizer, math_response),
-                                "total_tokens": count_tokens_fast(tokenizer, math_prompt) + count_tokens_fast(tokenizer, math_response)
+                                "prompt_tokens": count_tokens(tokenizer, math_prompt),
+                                "response_tokens": count_tokens(tokenizer, math_response),
+                                "total_tokens": count_tokens(tokenizer, math_prompt) + count_tokens(tokenizer, math_response)
                             })
             
-            # Step 3: Recall (minimal tokens)
+            # Step 3: Recall
             messages.append({"role": "user", "content": recall_prompt})
-            recall_response = generate_response_fast(tokenizer, model, model_config, messages, max_new_tokens=80)
+            recall_response = generate_response(tokenizer, model, model_config, messages, max_new_tokens=80)
             
             logs.append({
                 "session": session,
@@ -374,12 +365,12 @@ def run_drm_experiment_2x2_ultra_optimized(model_key, num_sessions=10, word_list
                 "context_window_condition": context_window_condition,
                 "prompt": recall_prompt,
                 "response": recall_response,
-                "prompt_tokens": count_tokens_fast(tokenizer, recall_prompt),
-                "response_tokens": count_tokens_fast(tokenizer, recall_response),
-                "total_tokens": count_tokens_fast(tokenizer, recall_prompt) + count_tokens_fast(tokenizer, recall_response)
+                "prompt_tokens": count_tokens(tokenizer, recall_prompt),
+                "response_tokens": count_tokens(tokenizer, recall_response),
+                "total_tokens": count_tokens(tokenizer, recall_prompt) + count_tokens(tokenizer, recall_response)
             })
             
-            # Minimal session summary
+            # Session summary
             logs.append({
                 "session": session,
                 "model": model_key,
@@ -401,8 +392,6 @@ def run_drm_experiment_2x2_ultra_optimized(model_key, num_sessions=10, word_list
     print(f"Completed {num_sessions} sessions for {model_key}-{list_length}-{context_window_condition}\n")
     
     return logs
-
-
 
 def extract_original_words(df_all):
     """Extract the original word list from the word_list prompts"""
@@ -487,9 +476,9 @@ def analyze_recall_performance(df_all, base_filename):
     
     return performance_data
 
-def run_full_2x2_drm_study_ultra_optimized(models_to_test, num_sessions=10, word_list_file="related_words.csv", 
-                                           lure_words=["sleep"]):
-    """Ultra-optimized 2x2 DRM experiment for cluster execution"""
+def run_drm_study(models_to_test, num_sessions=10, word_list_file="related_words.csv",
+                   lure_words=["sleep"]):
+    """Run DRM experiment across multiple models and conditions"""
     
     all_trial_results = []
     all_interaction_logs = []
@@ -517,7 +506,7 @@ def run_full_2x2_drm_study_ultra_optimized(models_to_test, num_sessions=10, word
                 context_condition = condition["context_window_condition"]
                 
                 print(f"\n{'='*80}")
-                print(f"Experiment {experiment_count}/{total_experiments}")
+                print(f"Running experiment {experiment_count}/{total_experiments}")
                 print(f"Model: {model_key}")
                 print(f"Lure word: '{lure_word}'")
                 print(f"List length: {list_length} ({'10 words' if list_length == 'short' else '50 words'})")
@@ -533,7 +522,7 @@ def run_full_2x2_drm_study_ultra_optimized(models_to_test, num_sessions=10, word
                 
                 condition_start = time.time()
                 
-                results = run_drm_experiment_2x2_ultra_optimized(
+                results = run_drm_experiment(
                     model_key=model_key,
                     num_sessions=num_sessions,
                     word_list_file=word_list_file,
@@ -545,10 +534,8 @@ def run_full_2x2_drm_study_ultra_optimized(models_to_test, num_sessions=10, word
                 print(f"Condition completed in {(time.time() - condition_start)/60:.1f} minutes")
                 
                 if results:
-                    # Process results efficiently
                     df_all = pd.DataFrame(results)
                     
-                    # Only log recall interactions to reduce file size
                     for _, row in df_all.iterrows():
                         if row['section'] == 'recall':
                             interaction_log = {
@@ -627,18 +614,18 @@ def run_full_2x2_drm_study_ultra_optimized(models_to_test, num_sessions=10, word
     if all_trial_results:
         timestamp = time.strftime("%Y%m%d_%H%M%S")
 
-        results_file = f"drm_2x2_ultra_results_{timestamp}.csv"
+        results_file = f"drm_results_{timestamp}.csv"
         results_df = pd.DataFrame(all_trial_results)
         results_df = results_df.sort_values(['model', 'lure_word', 'list_length', 'context_window_condition', 'result_type', 'session_number'])
         results_df.to_csv(results_file, index=False)
 
-        logs_file = f"drm_2x2_ultra_logs_{timestamp}.csv"
+        logs_file = f"drm_logs_{timestamp}.csv"
         logs_df = pd.DataFrame(all_interaction_logs)
         logs_df.to_csv(logs_file, index=False)
 
         print(f"\nResults saved:")
-        print(f"{results_file} - Results")
-        print(f"{logs_file} - Recall logs only")
+        print(f"{results_file} - Trial results")
+        print(f"{logs_file} - Interaction logs")
 
         print(f"\n{'='*100}")
         print("2x2 Experimental Summary")
@@ -654,15 +641,7 @@ def run_full_2x2_drm_study_ultra_optimized(models_to_test, num_sessions=10, word
                   f"{entry['false_memory_rate_percent']:>8.1f}% "
                   f"{entry['lure_word_hallucination_rate_percent']:>8.1f}%")
         
-        print("Optimizations applied:")
-        print("   - Single model load per condition")
-        print("   - Batch math problem processing (5-10 at once)")
-        print("   - Reduced math problems (5 early, 50 late)")
-        print("   - Global token caching with hash lookup")
-        print("   - Minimal logging (recall only)")
-        print("   - Pre-generated word lists")
-        print("   - Optimized generation parameters")
-        print("   - Batch session processing")
+
 
         return results_file, logs_file
     else:
@@ -674,7 +653,7 @@ if __name__ == "__main__":
 
     test_models = list(MODELS.keys())
 
-    result_files = run_full_2x2_drm_study_ultra_optimized(
+    result_files = run_drm_study(
         models_to_test=test_models,
         num_sessions=10,
         lure_words=["anger", "sleep", "doctor"]

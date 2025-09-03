@@ -1,9 +1,0 @@
-# Ignore everything
-*
-
-# But track these specific files
-!DRM/hallucinations_full_experiment.py
-!DRM/SLURM_TEMPLATE.sh
-!DRM/README.md
-!DRM/download_working_models.py
-!.gitignore
